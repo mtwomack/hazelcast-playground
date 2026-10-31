@@ -10,6 +10,7 @@ dependencies = [
     "hazelcast-python-client>=5.4",
     "psutil>=7.2.2",
     "docker>=7.2.0",
+    "python-dotenv>=1.2.4",
 ]
 
 [dependency-groups]

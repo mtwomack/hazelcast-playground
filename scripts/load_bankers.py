@@ -16,12 +16,16 @@ All data is randomly generated. Use --seed for the same bankers every run.
 from __future__ import annotations
 
 import argparse
-import json
-import os
 import random
 import string
 import sys
 import time
+from pathlib import Path
+
+# Make the project's `app` package importable when run as `python scripts/load_bankers.py`
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.util.hazelcast import HZ_CLUSTER_NAME, HZ_MEMBERS, create_client, get_map, to_hz  # noqa: E402
 
 FIRST_NAMES = [
     "Alex", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Jamie", "Avery", "Quinn", "Drew",
@@ -74,13 +78,11 @@ def generate_bankers(count: int, seed: int | None = None) -> dict[str, dict]:
 
 def load(bankers_map, bankers: dict[str, dict], batch_size: int = 1000) -> int:
     """put_all in batches; returns the number written. `bankers_map` is a blocking map proxy."""
-    from hazelcast.core import HazelcastJsonValue
-
     items = list(bankers.items())
     written = 0
     for i in range(0, len(items), batch_size):
         chunk = items[i:i + batch_size]
-        bankers_map.put_all({k: HazelcastJsonValue(json.dumps(v)) for k, v in chunk})
+        bankers_map.put_all({k: to_hz(v) for k, v in chunk})
         written += len(chunk)
         print(f"  loaded {written:,}/{len(items):,}", flush=True)
     return written
@@ -93,28 +95,25 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--batch-size", type=int, default=1000, help="entries per put_all (default 1000)")
     p.add_argument("--seed", type=int, default=42, help="random seed; same seed = same bankers (default 42)")
     p.add_argument("--clear", action="store_true", help="remove existing entries from the map first")
-    p.add_argument("--members", default=os.getenv("HZ_MEMBERS", "127.0.0.1:5701"),
-                   help="comma-separated member addresses (default HZ_MEMBERS or 127.0.0.1:5701)")
-    p.add_argument("--cluster", default=os.getenv("HZ_CLUSTER_NAME", "dev"),
-                   help="cluster name (default HZ_CLUSTER_NAME or dev)")
+    p.add_argument("--members", default=",".join(HZ_MEMBERS),
+                   help="comma-separated member addresses (default HZ_MEMBERS from .env / environment)")
+    p.add_argument("--cluster", default=HZ_CLUSTER_NAME,
+                   help="cluster name (default HZ_CLUSTER_NAME from .env / environment)")
     args = p.parse_args(argv)
 
     if args.count < 1 or args.batch_size < 1:
         p.error("--count and --batch-size must be at least 1")
 
-    import hazelcast
-
     members = [m.strip() for m in args.members.split(",") if m.strip()]
     print(f"Connecting to cluster '{args.cluster}' at {members} ...")
     try:
-        client = hazelcast.HazelcastClient(cluster_members=members, cluster_name=args.cluster,
-                                           cluster_connect_timeout=15)
+        client = create_client(members, args.cluster)
     except Exception as e:  # noqa: BLE001
         print(f"Could not connect to Hazelcast: {e}\nIs it running? Try: docker ps", file=sys.stderr)
         return 1
 
     try:
-        m = client.get_map(args.map).blocking()
+        m = get_map(client, args.map)
         if args.clear:
             print(f"Clearing map '{args.map}' ({m.size():,} entries) ...")
             m.clear()

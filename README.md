@@ -35,12 +35,31 @@ uv run uvicorn app.main:app --reload
 
 Open **http://localhost:8000/docs** for Swagger. Use **Try it out** on any endpoint.
 
-Settings (optional, defaults shown):
+### Settings (`.env`)
+
+Settings are read from a `.env` file in the project folder. Create yours from the example:
+
+```cmd
+copy .env.example .env
+```
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `HZ_MEMBERS` | `127.0.0.1:5701` | Comma-separated Hazelcast member addresses |
 | `HZ_CLUSTER_NAME` | `dev` | Cluster name (`dev` is Hazelcast's default) |
+| `HZ_CONTAINER` | `hazelcast` | Docker container name used by `/stats/hazelcast` |
+
+Without a `.env` file, the defaults above are used. Real environment variables override `.env`. Your `.env` isn't committed to git, so it's safe for machine-specific values.
+
+### Project layout
+
+```
+app/main.py              FastAPI endpoints
+app/stats.py             CPU / memory / disk / network stats
+app/util/hazelcast.py    Hazelcast settings and helpers (client, maps, JSON values)
+scripts/load_bankers.py  Loads test bankers
+tests/                   Tests (no cluster needed)
+```
 
 ## 3. Endpoints
 
