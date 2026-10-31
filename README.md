@@ -54,11 +54,12 @@ Without a `.env` file, the defaults above are used. Real environment variables o
 ### Project layout
 
 ```
-app/main.py              FastAPI endpoints
-app/stats.py             CPU / memory / disk / network stats
-app/util/hazelcast.py    Hazelcast settings and helpers (client, maps, JSON values)
-scripts/load_bankers.py  Loads test bankers
-tests/                   Tests (no cluster needed)
+app/main.py                 FastAPI routes: parameters and validation, then call a service
+app/services/hazelcast.py   Service layer: the logic behind each Hazelcast endpoint
+app/stats.py                CPU / memory / disk / network stats
+app/util/hazelcast.py       Hazelcast settings and low-level helpers (client, maps, JSON values)
+scripts/load_bankers.py     Loads test bankers
+tests/                      Tests (no cluster needed)
 ```
 
 ## 3. Endpoints
