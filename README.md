@@ -94,7 +94,44 @@ curl -X DELETE http://localhost:8000/maps/bankers
 
 In PowerShell, use `curl.exe` instead of `curl`, because `curl` there is an alias for `Invoke-WebRequest`.
 
-## 5. Run the tests
+## 5. Load test data (10,000 bankers)
+
+`scripts/load_bankers.py` fills the `bankers` map with randomly generated bankers, keyed by SOEID, in the same JSON format the API uses:
+
+```cmd
+uv run python scripts/load_bankers.py
+```
+
+Options:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--count` | `10000` | How many bankers to load |
+| `--clear` | off | Empty the map before loading |
+| `--map` | `bankers` | Map name |
+| `--batch-size` | `1000` | Entries sent per `put_all` call |
+| `--seed` | `42` | Same seed gives the same bankers every run |
+| `--members`, `--cluster` | `HZ_MEMBERS`, `HZ_CLUSTER_NAME` | Where Hazelcast is |
+
+Each banker looks like:
+
+```json
+{"soeid": "qa36048", "name": "Alex Dubois", "title": "Analyst", "dept": "Leveraged Finance",
+ "sector": "Industrials", "region": "NAM", "active": true,
+ "gfcids": ["3074165225", "4578950639"], "deal_team": ["dh41947", "dr84922"]}
+```
+
+Then try:
+
+```cmd
+curl http://localhost:8000/maps/bankers/size
+curl http://localhost:8000/maps/bankers/entries/qa36048
+curl "http://localhost:8000/maps/bankers/search?field=region&value=EMEA"
+```
+
+The data is fake: names, SOEIDs and GFCIDs are random.
+
+## 6. Run the tests
 
 The tests use a fake Hazelcast client, so no cluster is needed:
 
