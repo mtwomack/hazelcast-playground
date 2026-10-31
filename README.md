@@ -18,14 +18,20 @@ docker compose up -d
 
 ## 2. Install and run the API
 
-From this folder, in Command Prompt:
+This project uses [uv](https://docs.astral.sh/uv/). Install it once:
 
 ```cmd
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
+
+(or `pip install uv`). Then, from this folder:
+
+```cmd
+uv sync
+uv run uvicorn app.main:app --reload
+```
+
+`uv sync` creates `.venv` and installs the exact versions in `uv.lock`, including Python itself if you don't have a suitable version.
 
 Open **http://localhost:8000/docs** for Swagger. Use **Try it out** on any endpoint.
 
@@ -93,11 +99,14 @@ In PowerShell, use `curl.exe` instead of `curl`, because `curl` there is an alia
 The tests use a fake Hazelcast client, so no cluster is needed:
 
 ```cmd
-pytest -q
+uv run pytest -q
 ```
+
+To add a package: `uv add <package>` (or `uv add --dev <package>` for test-only tools).
 
 ## Troubleshooting
 
 - **App hangs at startup, then fails:** Hazelcast isn't reachable. Check `docker ps` shows the `hazelcast` container, and that `HZ_MEMBERS` points to it.
 - **`docker` is not recognized:** Docker Desktop isn't installed or isn't running.
+- **`uv sync` fails behind the corporate proxy:** set `HTTPS_PROXY`, and if your firm inspects TLS, run `set UV_SYSTEM_CERTS=1` so uv trusts the Windows certificate store (on older uv versions, `set UV_NATIVE_TLS=1`).
 - **Corporate proxy:** the Hazelcast client connects directly to `127.0.0.1`, so the proxy shouldn't affect it. If `curl` goes through the proxy, add `--noproxy localhost`.
