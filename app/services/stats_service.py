@@ -136,6 +136,7 @@ def container_stats(name: str, interval: float = 1.0, client=None) -> dict[str, 
 
     Raises ContainerNotFound if there's no such container, DockerUnavailable if Docker can't be reached.
     """
+    owns_client = client is None   # close only clients we create; a caller-supplied one is theirs
     try:
         import docker   # imported lazily so the API still starts without Docker
 
@@ -148,6 +149,10 @@ def container_stats(name: str, interval: float = 1.0, client=None) -> dict[str, 
         if type(e).__name__ == "NotFound":
             raise ContainerNotFound(f"Docker container '{name}' not found. Check the name with: docker ps") from e
         raise DockerUnavailable(f"Can't read Docker stats ({type(e).__name__}): is Docker Desktop running?") from e
+    finally:
+        # Release the client's connection to Docker now, instead of waiting for garbage collection.
+        if owns_client and client is not None:
+            client.close()
     return {
         "source": "container",
         "container": container.name,

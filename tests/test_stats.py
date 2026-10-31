@@ -134,3 +134,48 @@ def test_stats_combined_with_container(client, monkeypatch):
     body = client.get("/api/v1/stats?interval=0.1").json()
     assert body["hazelcast_container"]["container"] == "hazelcast"
     assert "total_mb" not in body["hazelcast_container"]["memory"]   # None fields are dropped
+
+
+def test_docker_client_is_closed_after_each_call(monkeypatch):
+    import docker
+
+    made = []
+
+    class C:
+        name, status = "hazelcast", "running"
+        def stats(self, stream): return snapshot(0, 0, 0, 0, 0, 0, 0, 0)
+
+    class FakeDocker:
+        def __init__(self):
+            self.closed = False
+            self.containers = type("X", (), {"get": staticmethod(lambda n: C())})()
+            made.append(self)
+        def close(self): self.closed = True
+
+    monkeypatch.setattr(docker, "from_env", FakeDocker)
+    for _ in range(5):
+        stats.container_stats("hazelcast", interval=0)
+    assert len(made) == 5 and all(c.closed for c in made)
+
+
+def test_docker_client_closed_even_when_container_missing(monkeypatch):
+    import docker
+
+    class NotFound(Exception): ...
+
+    def get(_name):
+        raise NotFound("404")
+
+    holder = {}
+
+    class FakeDocker:
+        def __init__(self):
+            self.closed = False
+            self.containers = type("X", (), {"get": staticmethod(get)})()
+            holder["c"] = self
+        def close(self): self.closed = True
+
+    monkeypatch.setattr(docker, "from_env", FakeDocker)
+    with pytest.raises(stats.ContainerNotFound):
+        stats.container_stats("nope", interval=0)
+    assert holder["c"].closed
