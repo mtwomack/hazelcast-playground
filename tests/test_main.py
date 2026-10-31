@@ -3,7 +3,9 @@ import pytest
 from fastapi.testclient import TestClient
 from hazelcast.core import HazelcastJsonValue
 
-from app.main import MAP_SERVICE, app, get_hz
+from app.clients.hazelcast_client import MAP_SERVICE
+from app.dependencies import get_hz
+from app.main import app
 
 
 class FakeMap:

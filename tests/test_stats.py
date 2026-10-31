@@ -1,10 +1,10 @@
-"""Tests for the resource stats (host via psutil, container via a fake Docker client)."""
+"""Tests for the stats service and /stats endpoints (host via psutil, container via a fake Docker client)."""
 from contextlib import asynccontextmanager
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app import stats
+from app.services import stats_service as stats
 from app.main import app
 
 MB = 1024 * 1024
@@ -79,28 +79,58 @@ def test_stats_host_endpoint(client):
     assert r.status_code == 200 and r.json()["source"] == "host"
 
 
-def test_stats_hazelcast_not_found(client, monkeypatch):
+def _raise(exc):
+    def f(*_a, **_k):
+        raise exc
+    return f
+
+
+def test_container_not_found_maps_docker_error():
     class NotFound(Exception): ...
-    monkeypatch.setattr(stats, "container_stats", lambda *a, **k: (_ for _ in ()).throw(NotFound("x")))
-    assert client.get("/stats/hazelcast?interval=0.1&container=nope").status_code == 404
+
+    def get(_name):
+        raise NotFound("404")
+
+    class Client:
+        containers = type("X", (), {"get": staticmethod(get)})()
+
+    with pytest.raises(stats.ContainerNotFound):
+        stats.container_stats("nope", interval=0.01, client=Client())
+
+
+def test_docker_down_maps_to_unavailable():
+    class Client:
+        containers = type("X", (), {"get": staticmethod(_raise(ConnectionError("no docker")))})()
+
+    with pytest.raises(stats.DockerUnavailable):
+        stats.container_stats("hazelcast", interval=0.01, client=Client())
+
+
+def test_stats_hazelcast_not_found(client, monkeypatch):
+    monkeypatch.setattr(stats, "container_stats", _raise(stats.ContainerNotFound("Docker container 'nope' not found")))
+    r = client.get("/stats/hazelcast?interval=0.1&container=nope")
+    assert r.status_code == 404 and "not found" in r.json()["detail"]
 
 
 def test_stats_hazelcast_docker_down(client, monkeypatch):
-    class DockerException(Exception): ...
-    monkeypatch.setattr(stats, "container_stats", lambda *a, **k: (_ for _ in ()).throw(DockerException("x")))
+    monkeypatch.setattr(stats, "container_stats", _raise(stats.DockerUnavailable("Can't read Docker stats")))
     r = client.get("/stats/hazelcast?interval=0.1")
     assert r.status_code == 503 and "Docker" in r.json()["detail"]
 
 
 def test_stats_combined_survives_missing_docker(client, monkeypatch):
-    class DockerException(Exception): ...
-    monkeypatch.setattr(stats, "container_stats", lambda *a, **k: (_ for _ in ()).throw(DockerException("x")))
+    monkeypatch.setattr(stats, "container_stats", _raise(stats.DockerUnavailable("Can't read Docker stats")))
     body = client.get("/stats?interval=0.1").json()
     assert body["host"]["source"] == "host"
-    assert body["hazelcast_container"]["available"] is False
+    assert body["hazelcast_container"] == {"available": False, "error": "Can't read Docker stats"}
 
 
 def test_stats_combined_with_container(client, monkeypatch):
-    monkeypatch.setattr(stats, "container_stats", lambda name, interval: {"source": "container", "container": name})
+    fake = {"source": "container", "container": "hazelcast", "status": "running", "sample_seconds": 0.1,
+            "cpu": {"percent": 5.0, "cores": 2}, "memory": {"percent": 10.0, "used_mb": 100.0, "limit_mb": 1000.0},
+            "disk": {"read_total_mb": 0.0, "write_total_mb": 0.0},
+            "network": {"received_total_mb": 1.0, "sent_total_mb": 2.0}}
+    monkeypatch.setattr(stats, "container_stats", lambda name, interval: {**fake, "container": name})
     body = client.get("/stats?interval=0.1").json()
     assert body["hazelcast_container"]["container"] == "hazelcast"
+    assert "total_mb" not in body["hazelcast_container"]["memory"]   # None fields are dropped

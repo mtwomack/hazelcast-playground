@@ -13,7 +13,8 @@ from typing import Any
 
 from hazelcast.predicate import equal
 
-from app.util.hazelcast import HZ_CLUSTER_NAME, from_hz, get_map, list_map_names, to_hz
+from app.clients.hazelcast_client import from_hz, get_map, list_map_names, to_hz
+from app.core.config import HZ_CLUSTER_NAME
 
 
 class EntryNotFound(LookupError):

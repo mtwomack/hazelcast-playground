@@ -1,7 +1,7 @@
-"""Service-layer tests: call app/services/hazelcast.py directly (no HTTP, no cluster)."""
+"""Service-layer tests: call app/services/hazelcast_service.py directly (no HTTP, no cluster)."""
 import pytest
 
-from app.services import hazelcast as svc
+from app.services import hazelcast_service as svc
 from tests.test_main import FakeHz
 
 ALICE = {"name": "Alice", "dept": "Risk", "level": 3}

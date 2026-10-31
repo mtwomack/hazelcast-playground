@@ -1,5 +1,5 @@
 """
-Resource stats: CPU, memory, disk read/write and network I/O.
+Stats service: CPU, memory, disk read/write and network I/O.
 
 - Host stats come from psutil (the machine running this API).
 - Container stats come from the Docker Engine API (the Hazelcast container),
@@ -16,6 +16,14 @@ from typing import Any
 import psutil
 
 MB = 1024 * 1024
+
+
+class ContainerNotFound(LookupError):
+    """No Docker container with that name."""
+
+
+class DockerUnavailable(RuntimeError):
+    """Docker isn't running or can't be reached."""
 
 
 def _mb(n: float) -> float:
@@ -124,14 +132,22 @@ def parse_container_stats(raw: dict, prev: dict | None = None, interval: float |
 
 
 def container_stats(name: str, interval: float = 1.0, client=None) -> dict[str, Any]:
-    """Stats for a running Docker container, sampled over `interval` seconds."""
-    import docker   # imported lazily so the API still starts without Docker
+    """Stats for a running Docker container, sampled over `interval` seconds.
 
-    client = client or docker.from_env()
-    container = client.containers.get(name)
-    first = container.stats(stream=False)
-    time.sleep(interval)
-    second = container.stats(stream=False)
+    Raises ContainerNotFound if there's no such container, DockerUnavailable if Docker can't be reached.
+    """
+    try:
+        import docker   # imported lazily so the API still starts without Docker
+
+        client = client or docker.from_env()
+        container = client.containers.get(name)
+        first = container.stats(stream=False)
+        time.sleep(interval)
+        second = container.stats(stream=False)
+    except Exception as e:  # noqa: BLE001 - docker raises many exception types
+        if type(e).__name__ == "NotFound":
+            raise ContainerNotFound(f"Docker container '{name}' not found. Check the name with: docker ps") from e
+        raise DockerUnavailable(f"Can't read Docker stats ({type(e).__name__}): is Docker Desktop running?") from e
     return {
         "source": "container",
         "container": container.name,
@@ -139,3 +155,13 @@ def container_stats(name: str, interval: float = 1.0, client=None) -> dict[str, 
         "sample_seconds": interval,
         **parse_container_stats(second, prev=first, interval=interval),
     }
+
+
+def all_stats(container: str, interval: float = 1.0) -> dict[str, Any]:
+    """Host stats plus container stats; the container part reports its error instead of failing."""
+    host = host_stats(interval)
+    try:
+        hz = container_stats(container, interval)
+    except (ContainerNotFound, DockerUnavailable) as e:
+        hz = {"available": False, "error": str(e)}
+    return {"host": host, "hazelcast_container": hz}

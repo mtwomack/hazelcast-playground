@@ -25,7 +25,8 @@ from pathlib import Path
 # Make the project's `app` package importable when run as `python scripts/load_bankers.py`
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.util.hazelcast import HZ_CLUSTER_NAME, HZ_MEMBERS, create_client, get_map, to_hz  # noqa: E402
+from app.clients.hazelcast_client import create_client, get_map, to_hz  # noqa: E402
+from app.core.config import HZ_CLUSTER_NAME, HZ_MEMBERS  # noqa: E402
 
 FIRST_NAMES = [
     "Alex", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Jamie", "Avery", "Quinn", "Drew",

@@ -54,13 +54,24 @@ Without a `.env` file, the defaults above are used. Real environment variables o
 ### Project layout
 
 ```
-app/main.py                 FastAPI routes: parameters and validation, then call a service
-app/services/hazelcast.py   Service layer: the logic behind each Hazelcast endpoint
-app/stats.py                CPU / memory / disk / network stats
-app/util/hazelcast.py       Hazelcast settings and low-level helpers (client, maps, JSON values)
-scripts/load_bankers.py     Loads test bankers
-tests/                      Tests (no cluster needed)
+app/
+  main.py                        Creates the app: Hazelcast connection, error handling, routers
+  core/config.py                 Settings from .env
+  dependencies.py                FastAPI dependencies (get_hz)
+  routers/maps.py                Cluster, map and entry endpoints
+  routers/stats.py               Stats endpoints
+  services/hazelcast_service.py  Logic behind the Hazelcast endpoints
+  services/stats_service.py      Logic behind the stats endpoints (psutil, Docker)
+  clients/hazelcast_client.py    Low-level Hazelcast helpers (connect, maps, JSON values)
+  schemas/maps.py                Response models for the map endpoints
+  schemas/stats.py               Response models for the stats endpoints
+scripts/load_bankers.py          Loads test bankers
+tests/                           Tests (no cluster needed)
 ```
+
+How a request flows: **router** (validates input) → **service** (does the work, raises errors like `EntryNotFound`) → **client** (talks to Hazelcast). `main.py` turns service errors into HTTP status codes. Services don't import FastAPI, so scripts and tests can call them directly.
+
+To add an endpoint: put the logic in a service function, add a response model in `schemas/`, then add a route in `routers/` that calls it.
 
 ## 3. Endpoints
 
