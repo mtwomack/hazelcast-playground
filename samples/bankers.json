@@ -1,0 +1,5 @@
+{
+  "ab12345": {"name": "Alice", "dept": "Risk", "gfcids": ["1001", "1002"], "deal_team": ["cd67890"]},
+  "cd67890": {"name": "Bob", "dept": "Quant", "gfcids": ["2001"], "deal_team": ["ab12345"]},
+  "ef24680": {"name": "Cara", "dept": "Risk", "gfcids": ["3001", "3002", "3003"], "deal_team": []}
+}
