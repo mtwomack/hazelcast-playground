@@ -73,55 +73,67 @@ ALICE = {"name": "Alice", "dept": "Risk", "level": 3}
 
 def test_health(client):
     c, _ = client
-    r = c.get("/health")
+    r = c.get("/api/v1/health")
     assert r.status_code == 200 and r.json()["connected"] is True
 
 
 def test_put_get_delete(client):
     c, fake = client
-    assert c.put("/maps/bankers/entries/ab12345", json=ALICE).status_code == 200
+    assert c.put("/api/v1/maps/bankers/entries/ab12345", json=ALICE).status_code == 200
     assert isinstance(fake.maps["bankers"].d["ab12345"], HazelcastJsonValue)
-    assert c.get("/maps/bankers/entries/ab12345").json()["value"] == ALICE
-    assert c.delete("/maps/bankers/entries/ab12345").json()["deleted"] is True
-    assert c.get("/maps/bankers/entries/ab12345").status_code == 404
-    assert c.delete("/maps/bankers/entries/ab12345").status_code == 404
+    assert c.get("/api/v1/maps/bankers/entries/ab12345").json()["value"] == ALICE
+    assert c.delete("/api/v1/maps/bankers/entries/ab12345").json()["deleted"] is True
+    assert c.get("/api/v1/maps/bankers/entries/ab12345").status_code == 404
+    assert c.delete("/api/v1/maps/bankers/entries/ab12345").status_code == 404
 
 
 def test_scalar_values_round_trip(client):
     c, _ = client
     for key, value in [("s", "hello"), ("n", 42), ("b", True), ("l", [1, 2])]:
-        c.put(f"/maps/misc/entries/{key}", json=value)
-        assert c.get(f"/maps/misc/entries/{key}").json()["value"] == value
+        c.put(f"/api/v1/maps/misc/entries/{key}", json=value)
+        assert c.get(f"/api/v1/maps/misc/entries/{key}").json()["value"] == value
 
 
 def test_ttl_passed_through(client):
     c, fake = client
-    c.put("/maps/bankers/entries/ab1?ttl=60", json=ALICE)
+    c.put("/api/v1/maps/bankers/entries/ab1?ttl=60", json=ALICE)
     assert fake.maps["bankers"].ttls["ab1"] == 60
 
 
 def test_bulk_list_size_keys_clear(client):
     c, _ = client
-    r = c.post("/maps/bankers/entries", json={"a": ALICE, "b": {**ALICE, "name": "Bob"}, "c": {"name": "Cara"}})
+    r = c.post("/api/v1/maps/bankers/entries", json={"a": ALICE, "b": {**ALICE, "name": "Bob"}, "c": {"name": "Cara"}})
     assert r.json()["written"] == 3
-    assert c.get("/maps/bankers/size").json()["size"] == 3
-    assert c.get("/maps/bankers/keys").json() == ["a", "b", "c"]
-    listing = c.get("/maps/bankers?limit=2").json()
+    assert c.get("/api/v1/maps/bankers/size").json()["size"] == 3
+    assert c.get("/api/v1/maps/bankers/keys").json() == ["a", "b", "c"]
+    listing = c.get("/api/v1/maps/bankers?limit=2").json()
     assert listing["size"] == 3 and listing["returned"] == 2
-    assert c.get("/maps").json() == ["bankers"]
-    assert c.delete("/maps/bankers").json()["removed"] == 3
-    assert c.get("/maps/bankers/size").json()["size"] == 0
+    assert c.get("/api/v1/maps").json() == ["bankers"]
+    assert c.delete("/api/v1/maps/bankers").json()["removed"] == 3
+    assert c.get("/api/v1/maps/bankers/size").json()["size"] == 0
 
 
 def test_search(client):
     c, _ = client
-    c.post("/maps/bankers/entries", json={"a": ALICE, "b": {"name": "Bob", "dept": "Quant", "level": 3}})
-    assert set(c.get("/maps/bankers/search", params={"field": "dept", "value": "Risk"}).json()) == {"a"}
-    assert set(c.get("/maps/bankers/search", params={"field": "level", "value": "3"}).json()) == {"a", "b"}
+    c.post("/api/v1/maps/bankers/entries", json={"a": ALICE, "b": {"name": "Bob", "dept": "Quant", "level": 3}})
+    assert set(c.get("/api/v1/maps/bankers/search", params={"field": "dept", "value": "Risk"}).json()) == {"a"}
+    assert set(c.get("/api/v1/maps/bankers/search", params={"field": "level", "value": "3"}).json()) == {"a", "b"}
 
 
 def test_swagger_available(client):
     c, _ = client
     assert c.get("/docs").status_code == 200
     paths = c.get("/openapi.json").json()["paths"]
-    assert "/maps/{map_name}/entries/{key}" in paths
+    assert "/api/v1/maps/{map_name}/entries/{key}" in paths
+
+
+def test_unversioned_paths_are_gone(client):
+    c, _ = client
+    assert c.get("/maps").status_code == 404
+    assert c.get("/api/v1/maps").status_code == 200
+
+
+def test_root_redirects_to_docs(client):
+    c, _ = client
+    r = c.get("/", follow_redirects=False)
+    assert r.status_code in (302, 307) and r.headers["location"] == "/docs"

@@ -3,7 +3,7 @@ Load fake bankers into the Hazelcast `bankers` map.
 
 Each entry is keyed by a lowercase SOEID (e.g. "ab12345") and stored as JSON,
 in the same format the API uses, so you can read them back with
-GET /maps/bankers/entries/{soeid}.
+GET /api/v1/maps/bankers/entries/{soeid}.
 
 Usage (from the project folder):
     uv run python scripts/load_bankers.py                  # 10,000 bankers
@@ -128,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
 
         sample = next(iter(bankers))
         print(f"\nDone: {args.count:,} bankers in {elapsed:.1f}s. Map '{args.map}' now has {m.size():,} entries.")
-        print(f"Try:  curl http://localhost:8000/maps/{args.map}/entries/{sample}")
+        print(f"Try:  curl http://localhost:8000/api/v1/maps/{args.map}/entries/{sample}")
     finally:
         client.shutdown()
     return 0

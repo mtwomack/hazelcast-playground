@@ -11,11 +11,11 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.clients.hazelcast_client import create_client
-from app.core.config import HZ_CLUSTER_NAME, HZ_MEMBERS
-from app.routers import maps, stats
+from app.core.config import API_V1_PREFIX, HZ_CLUSTER_NAME, HZ_MEMBERS
+from app.routers import v1
 from app.services.hazelcast_service import EntryNotFound
 from app.services.stats_service import ContainerNotFound, DockerUnavailable
 
@@ -53,5 +53,11 @@ app.add_exception_handler(EntryNotFound, _error(404))
 app.add_exception_handler(ContainerNotFound, _error(404))
 app.add_exception_handler(DockerUnavailable, _error(503))
 
-app.include_router(maps.router)
-app.include_router(stats.router)
+# API versions. Every v1 endpoint lives under /api/v1.
+# For a breaking change, add app/routers/v2 and include it under /api/v2 alongside v1.
+app.include_router(v1.router, prefix=API_V1_PREFIX)
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/docs")

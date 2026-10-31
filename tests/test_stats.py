@@ -75,7 +75,7 @@ def client(monkeypatch):
 
 
 def test_stats_host_endpoint(client):
-    r = client.get("/stats/host?interval=0.1")
+    r = client.get("/api/v1/stats/host?interval=0.1")
     assert r.status_code == 200 and r.json()["source"] == "host"
 
 
@@ -108,19 +108,19 @@ def test_docker_down_maps_to_unavailable():
 
 def test_stats_hazelcast_not_found(client, monkeypatch):
     monkeypatch.setattr(stats, "container_stats", _raise(stats.ContainerNotFound("Docker container 'nope' not found")))
-    r = client.get("/stats/hazelcast?interval=0.1&container=nope")
+    r = client.get("/api/v1/stats/hazelcast?interval=0.1&container=nope")
     assert r.status_code == 404 and "not found" in r.json()["detail"]
 
 
 def test_stats_hazelcast_docker_down(client, monkeypatch):
     monkeypatch.setattr(stats, "container_stats", _raise(stats.DockerUnavailable("Can't read Docker stats")))
-    r = client.get("/stats/hazelcast?interval=0.1")
+    r = client.get("/api/v1/stats/hazelcast?interval=0.1")
     assert r.status_code == 503 and "Docker" in r.json()["detail"]
 
 
 def test_stats_combined_survives_missing_docker(client, monkeypatch):
     monkeypatch.setattr(stats, "container_stats", _raise(stats.DockerUnavailable("Can't read Docker stats")))
-    body = client.get("/stats?interval=0.1").json()
+    body = client.get("/api/v1/stats?interval=0.1").json()
     assert body["host"]["source"] == "host"
     assert body["hazelcast_container"] == {"available": False, "error": "Can't read Docker stats"}
 
@@ -131,6 +131,6 @@ def test_stats_combined_with_container(client, monkeypatch):
             "disk": {"read_total_mb": 0.0, "write_total_mb": 0.0},
             "network": {"received_total_mb": 1.0, "sent_total_mb": 2.0}}
     monkeypatch.setattr(stats, "container_stats", lambda name, interval: {**fake, "container": name})
-    body = client.get("/stats?interval=0.1").json()
+    body = client.get("/api/v1/stats?interval=0.1").json()
     assert body["hazelcast_container"]["container"] == "hazelcast"
     assert "total_mb" not in body["hazelcast_container"]["memory"]   # None fields are dropped

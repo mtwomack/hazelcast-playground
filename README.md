@@ -47,7 +47,7 @@ copy .env.example .env
 |---|---|---|
 | `HZ_MEMBERS` | `127.0.0.1:5701` | Comma-separated Hazelcast member addresses |
 | `HZ_CLUSTER_NAME` | `dev` | Cluster name (`dev` is Hazelcast's default) |
-| `HZ_CONTAINER` | `hazelcast` | Docker container name used by `/stats/hazelcast` |
+| `HZ_CONTAINER` | `hazelcast` | Docker container name used by `/api/v1/stats/hazelcast` |
 
 Without a `.env` file, the defaults above are used. Real environment variables override `.env`. Your `.env` isn't committed to git, so it's safe for machine-specific values.
 
@@ -58,8 +58,8 @@ app/
   main.py                        Creates the app: Hazelcast connection, error handling, routers
   core/config.py                 Settings from .env
   dependencies.py                FastAPI dependencies (get_hz)
-  routers/maps.py                Cluster, map and entry endpoints
-  routers/stats.py               Stats endpoints
+  routers/v1/maps.py             Cluster, map and entry endpoints (served under /api/v1)
+  routers/v1/stats.py            Stats endpoints (served under /api/v1)
   services/hazelcast_service.py  Logic behind the Hazelcast endpoints
   services/stats_service.py      Logic behind the stats endpoints (psutil, Docker)
   clients/hazelcast_client.py    Low-level Hazelcast helpers (connect, maps, JSON values)
@@ -71,25 +71,27 @@ tests/                           Tests (no cluster needed)
 
 How a request flows: **router** (validates input) → **service** (does the work, raises errors like `EntryNotFound`) → **client** (talks to Hazelcast). `main.py` turns service errors into HTTP status codes. Services don't import FastAPI, so scripts and tests can call them directly.
 
-To add an endpoint: put the logic in a service function, add a response model in `schemas/`, then add a route in `routers/` that calls it.
+To add an endpoint: put the logic in a service function, add a response model in `schemas/`, then add a route in `routers/v1/` that calls it.
 
 ## 3. Endpoints
 
 | Method | Path | What it does |
 |---|---|---|
-| GET | `/health` | Connection status and cluster members |
-| GET | `/maps` | List map names |
-| GET | `/maps/{map}` | List entries (`?limit=100`) |
-| GET | `/maps/{map}/size` | Number of entries |
-| GET | `/maps/{map}/keys` | List keys |
-| GET | `/maps/{map}/search?field=&value=` | Entries where a JSON field equals a value |
-| POST | `/maps/{map}/entries` | Put many entries (JSON object of key → value) |
-| DELETE | `/maps/{map}` | Remove all entries |
-| PUT | `/maps/{map}/entries/{key}` | Create or replace an entry (`?ttl=60` to expire it) |
-| GET | `/maps/{map}/entries/{key}` | Get an entry |
-| DELETE | `/maps/{map}/entries/{key}` | Delete an entry |
+| GET | `/api/v1/health` | Connection status and cluster members |
+| GET | `/api/v1/maps` | List map names |
+| GET | `/api/v1/maps/{map}` | List entries (`?limit=100`) |
+| GET | `/api/v1/maps/{map}/size` | Number of entries |
+| GET | `/api/v1/maps/{map}/keys` | List keys |
+| GET | `/api/v1/maps/{map}/search?field=&value=` | Entries where a JSON field equals a value |
+| POST | `/api/v1/maps/{map}/entries` | Put many entries (JSON object of key → value) |
+| DELETE | `/api/v1/maps/{map}` | Remove all entries |
+| PUT | `/api/v1/maps/{map}/entries/{key}` | Create or replace an entry (`?ttl=60` to expire it) |
+| GET | `/api/v1/maps/{map}/entries/{key}` | Get an entry |
+| DELETE | `/api/v1/maps/{map}/entries/{key}` | Delete an entry |
 
 Values can be any JSON. Keys are strings.
+
+All endpoints are versioned under **`/api/v1`**. Opening http://localhost:8000/ redirects to Swagger. If an endpoint ever needs a breaking change, a `/api/v2` will be added alongside v1, so existing callers keep working.
 
 ## 4. curl examples (Windows Command Prompt)
 
@@ -97,30 +99,30 @@ Inline JSON in Command Prompt needs `\"` around strings. The `samples` folder ha
 
 ```cmd
 :: Check the connection
-curl http://localhost:8000/health
+curl http://localhost:8000/api/v1/health
 
 :: Put one entry (from a file)
-curl -X PUT http://localhost:8000/maps/bankers/entries/ab12345 -H "Content-Type: application/json" -d @samples\alice.json
+curl -X PUT http://localhost:8000/api/v1/maps/bankers/entries/ab12345 -H "Content-Type: application/json" -d @samples\alice.json
 
 :: Put one entry (inline JSON)
-curl -X PUT http://localhost:8000/maps/bankers/entries/zz11111 -H "Content-Type: application/json" -d "{\"name\": \"Zoe\", \"dept\": \"Ops\"}"
+curl -X PUT http://localhost:8000/api/v1/maps/bankers/entries/zz11111 -H "Content-Type: application/json" -d "{\"name\": \"Zoe\", \"dept\": \"Ops\"}"
 
 :: Put an entry that expires after 60 seconds
-curl -X PUT "http://localhost:8000/maps/bankers/entries/temp1?ttl=60" -H "Content-Type: application/json" -d "{\"note\": \"gone in a minute\"}"
+curl -X PUT "http://localhost:8000/api/v1/maps/bankers/entries/temp1?ttl=60" -H "Content-Type: application/json" -d "{\"note\": \"gone in a minute\"}"
 
 :: Load several entries
-curl -X POST http://localhost:8000/maps/bankers/entries -H "Content-Type: application/json" -d @samples\bankers.json
+curl -X POST http://localhost:8000/api/v1/maps/bankers/entries -H "Content-Type: application/json" -d @samples\bankers.json
 
 :: Read
-curl http://localhost:8000/maps/bankers/entries/ab12345
-curl http://localhost:8000/maps/bankers
-curl http://localhost:8000/maps/bankers/size
-curl http://localhost:8000/maps/bankers/keys
-curl "http://localhost:8000/maps/bankers/search?field=dept&value=Risk"
+curl http://localhost:8000/api/v1/maps/bankers/entries/ab12345
+curl http://localhost:8000/api/v1/maps/bankers
+curl http://localhost:8000/api/v1/maps/bankers/size
+curl http://localhost:8000/api/v1/maps/bankers/keys
+curl "http://localhost:8000/api/v1/maps/bankers/search?field=dept&value=Risk"
 
 :: Delete one entry, then clear the map
-curl -X DELETE http://localhost:8000/maps/bankers/entries/ab12345
-curl -X DELETE http://localhost:8000/maps/bankers
+curl -X DELETE http://localhost:8000/api/v1/maps/bankers/entries/ab12345
+curl -X DELETE http://localhost:8000/api/v1/maps/bankers
 ```
 
 In PowerShell, use `curl.exe` instead of `curl`, because `curl` there is an alias for `Invoke-WebRequest`.
@@ -155,9 +157,9 @@ Each banker looks like:
 Then try:
 
 ```cmd
-curl http://localhost:8000/maps/bankers/size
-curl http://localhost:8000/maps/bankers/entries/qa36048
-curl "http://localhost:8000/maps/bankers/search?field=region&value=EMEA"
+curl http://localhost:8000/api/v1/maps/bankers/size
+curl http://localhost:8000/api/v1/maps/bankers/entries/qa36048
+curl "http://localhost:8000/api/v1/maps/bankers/search?field=region&value=EMEA"
 ```
 
 The data is fake: names, SOEIDs and GFCIDs are random.
@@ -166,25 +168,25 @@ The data is fake: names, SOEIDs and GFCIDs are random.
 
 | Endpoint | What it measures |
 |---|---|
-| `GET /stats` | Both of the below in one response |
-| `GET /stats/host` | The machine running this API (via `psutil`) |
-| `GET /stats/hazelcast` | The Hazelcast Docker container, the same numbers as `docker stats` |
+| `GET /api/v1/stats` | Both of the below in one response |
+| `GET /api/v1/stats/host` | The machine running this API (via `psutil`) |
+| `GET /api/v1/stats/hazelcast` | The Hazelcast Docker container, the same numbers as `docker stats` |
 
 Each returns CPU %, memory used, disk read/write and network received/sent, both as **per-second rates** measured over a short sample window and as **totals** since start.
 
 ```cmd
-curl http://localhost:8000/stats
-curl "http://localhost:8000/stats/host?interval=2"
-curl "http://localhost:8000/stats/hazelcast?container=hazelcast"
+curl http://localhost:8000/api/v1/stats
+curl "http://localhost:8000/api/v1/stats/host?interval=2"
+curl "http://localhost:8000/api/v1/stats/hazelcast?container=hazelcast"
 ```
 
 - `interval` (default `1`, up to `10`) is how many seconds to measure over. The Hazelcast call takes a couple of seconds longer, because Docker samples CPU itself.
 - Container CPU % is per core, like `docker stats`: 200% means two full cores.
 - The container name defaults to `hazelcast`. Change it with `?container=` or the `HZ_CONTAINER` variable.
-- Container stats need Docker Desktop running. If it isn't, `/stats/hazelcast` returns 503 and `/stats` still returns the host stats.
+- Container stats need Docker Desktop running. If it isn't, `/api/v1/stats/hazelcast` returns 503 and `/api/v1/stats` still returns the host stats.
 - Disk I/O inside Docker Desktop containers is often reported as 0. Hazelcast keeps data in memory, so this is expected.
 
-To see the effect of a load, run `/stats/hazelcast` while `scripts/load_bankers.py` is running.
+To see the effect of a load, run `/api/v1/stats/hazelcast` while `scripts/load_bankers.py` is running.
 
 ## 7. Run the tests
 

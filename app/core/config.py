@@ -18,3 +18,5 @@ load_dotenv(os.getenv("ENV_FILE") or PROJECT_ROOT / ".env")
 HZ_MEMBERS = [m.strip() for m in os.getenv("HZ_MEMBERS", "127.0.0.1:5701").split(",") if m.strip()]
 HZ_CLUSTER_NAME = os.getenv("HZ_CLUSTER_NAME", "dev")
 HZ_CONTAINER = os.getenv("HZ_CONTAINER", "hazelcast")   # Docker container name for /stats
+
+API_V1_PREFIX = "/api/v1"   # every endpoint is served under this path
