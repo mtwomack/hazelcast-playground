@@ -8,6 +8,8 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "hazelcast-python-client>=5.4",
+    "psutil>=7.2.2",
+    "docker>=7.2.0",
 ]
 
 [dependency-groups]

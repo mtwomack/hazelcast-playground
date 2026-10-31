@@ -18,12 +18,15 @@ from fastapi import Body, Depends, FastAPI, HTTPException, Path, Query, Request
 from hazelcast.core import HazelcastJsonValue
 from hazelcast.predicate import equal
 
+from app import stats as resource_stats
+
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("hazelcast_playground")
 
 HZ_MEMBERS = [m.strip() for m in os.getenv("HZ_MEMBERS", "127.0.0.1:5701").split(",") if m.strip()]
 HZ_CLUSTER_NAME = os.getenv("HZ_CLUSTER_NAME", "dev")
 MAP_SERVICE = "hz:impl:mapService"
+HZ_CONTAINER = os.getenv("HZ_CONTAINER", "hazelcast")   # Docker container name for /stats
 
 
 @asynccontextmanager
@@ -182,3 +185,43 @@ def delete_entry(map_name: str = MapName, key: str = Key, hz=Depends(get_hz)):
     if old is None:
         raise HTTPException(404, f"Key '{key}' not found in map '{map_name}'")
     return {"map": map_name, "key": key, "deleted": True}
+
+
+# --------------------------------------------------------------------------- #
+# Resource stats
+# --------------------------------------------------------------------------- #
+SampleSeconds = Query(1.0, ge=0.1, le=10, description="How long to measure for (rates are per second over this window)")
+
+
+def _hazelcast_container_stats(container: str, interval: float) -> dict:
+    try:
+        return resource_stats.container_stats(container, interval)
+    except Exception as e:  # noqa: BLE001
+        name = type(e).__name__
+        if name == "NotFound":
+            raise HTTPException(404, f"Docker container '{container}' not found. Check the name with: docker ps")
+        raise HTTPException(503, f"Can't read Docker stats ({name}): is Docker Desktop running?")
+
+
+@app.get("/stats", tags=["stats"],
+         summary="CPU, memory, disk and network for this machine and the Hazelcast container")
+def stats_all(interval: float = SampleSeconds,
+              container: str = Query(HZ_CONTAINER, description="Hazelcast Docker container name")):
+    host = resource_stats.host_stats(interval)
+    try:
+        hz = _hazelcast_container_stats(container, interval)
+    except HTTPException as e:
+        hz = {"available": False, "error": e.detail}
+    return {"host": host, "hazelcast_container": hz}
+
+
+@app.get("/stats/host", tags=["stats"], summary="CPU, memory, disk and network for this machine")
+def stats_host(interval: float = SampleSeconds):
+    return resource_stats.host_stats(interval)
+
+
+@app.get("/stats/hazelcast", tags=["stats"],
+         summary="CPU, memory, disk and network for the Hazelcast Docker container (like `docker stats`)")
+def stats_hazelcast(interval: float = SampleSeconds,
+                    container: str = Query(HZ_CONTAINER, description="Hazelcast Docker container name")):
+    return _hazelcast_container_stats(container, interval)

@@ -131,7 +131,31 @@ curl "http://localhost:8000/maps/bankers/search?field=region&value=EMEA"
 
 The data is fake: names, SOEIDs and GFCIDs are random.
 
-## 6. Run the tests
+## 6. Resource stats (CPU, memory, disk, network)
+
+| Endpoint | What it measures |
+|---|---|
+| `GET /stats` | Both of the below in one response |
+| `GET /stats/host` | The machine running this API (via `psutil`) |
+| `GET /stats/hazelcast` | The Hazelcast Docker container, the same numbers as `docker stats` |
+
+Each returns CPU %, memory used, disk read/write and network received/sent, both as **per-second rates** measured over a short sample window and as **totals** since start.
+
+```cmd
+curl http://localhost:8000/stats
+curl "http://localhost:8000/stats/host?interval=2"
+curl "http://localhost:8000/stats/hazelcast?container=hazelcast"
+```
+
+- `interval` (default `1`, up to `10`) is how many seconds to measure over. The Hazelcast call takes a couple of seconds longer, because Docker samples CPU itself.
+- Container CPU % is per core, like `docker stats`: 200% means two full cores.
+- The container name defaults to `hazelcast`. Change it with `?container=` or the `HZ_CONTAINER` variable.
+- Container stats need Docker Desktop running. If it isn't, `/stats/hazelcast` returns 503 and `/stats` still returns the host stats.
+- Disk I/O inside Docker Desktop containers is often reported as 0. Hazelcast keeps data in memory, so this is expected.
+
+To see the effect of a load, run `/stats/hazelcast` while `scripts/load_bankers.py` is running.
+
+## 7. Run the tests
 
 The tests use a fake Hazelcast client, so no cluster is needed:
 
